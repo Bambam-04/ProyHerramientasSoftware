@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CIMA — Material</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header><h1>CIMA</h1><div><span id="quien"></span><button class="sec mini" onclick="salir()">Cerrar sesión</button></div></header>
+  <main>
+    <section>
+      <h2>Material disponible</h2>
+      <table>
+        <thead><tr><th>Material</th><th>Estado</th><th>Disponibles</th><th></th></tr></thead>
+        <tbody id="materiales"></tbody>
+      </table>
+    </section>
+    <section id="formulario" hidden>
+      <h2 id="titulo-form">Solicitar material</h2>
+      <div class="fila">
+        <input id="cantidad" type="number" value="1" aria-label="Cantidad">
+        <input id="fecha" type="date" aria-label="Fecha de devolución">
+        <button id="enviar">Enviar solicitud</button>
+        <button class="sec" id="cancelar">Cancelar</button>
+      </div>
+      <div id="msg" class="msg" role="alert"></div>
+    </section>
+    <section>
+      <h2>Mis préstamos</h2>
+      <table>
+        <thead><tr><th>Material</th><th>Cant.</th><th>Estado</th><th>Entrega</th><th>Devolver el</th></tr></thead>
+        <tbody id="mios"></tbody>
+      </table>
+    </section>
+  </main>
+  <script src="app.js"></script>
+  <script>
+    if (requerirSesion()) iniciar();
+    let seleccionado = null;
+
+    async function cargar() {
+      const [mats, mios] = await Promise.all([api('/api/materiales'), api('/api/mis-prestamos')]);
+      document.getElementById('materiales').innerHTML = mats.map((m) => `
+        <tr><td>${esc(m.nombre)}</td>
+        <td><span class="badge ${esc(m.estado)}">${esc(m.estado)}</span></td>
+        <td>${m.disponibles} de ${m.cantidadTotal}</td>
+        <td><button class="mini" data-id="${m.id}" data-nombre="${esc(m.nombre)}">Solicitar</button></td></tr>`).join('');
+      document.getElementById('mios').innerHTML = mios.length ? mios.map((p) => `
+        <tr><td>${esc(p.material.nombre)}</td><td>${p.cantidad}</td>
+        <td><span class="badge ${p.estado}">${p.estado.toLowerCase()}</span></td>
+        <td>${fecha(p.fechaEntrega)}</td><td>${fecha(p.fechaDevolucion)}</td></tr>`).join('')
+        : '<tr><td colspan="5">Aún no has solicitado material.</td></tr>';
+    }
+
+    function iniciar() {
+      cargar().catch((e) => mostrar('msg', e.message, 'error'));
+      document.getElementById('materiales').addEventListener('click', (ev) => {
+        const b = ev.target.closest('button[data-id]'); if (!b) return;
+        seleccionado = b.dataset.id;
+        document.getElementById('titulo-form').textContent = 'Solicitar: ' + b.dataset.nombre;
+        document.getElementById('formulario').hidden = false;
+        mostrar('msg', '');
+      });
+      document.getElementById('cancelar').addEventListener('click', () => { document.getElementById('formulario').hidden = true; });
+      document.getElementById('enviar').addEventListener('click', async () => {
+        try {
+          const d = await api('/api/prestamos', { method: 'POST', body: {
+            materialId: seleccionado,
+            cantidad: document.getElementById('cantidad').value,
+            fechaDevolucion: document.getElementById('fecha').value } });
+          mostrar('msg', d.mensaje, 'ok');
+          cargar();
+        } catch (e) { mostrar('msg', e.message, 'error'); }
+      });
+    }
+  </script>
+</body>
+</html>

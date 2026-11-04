@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Rol {
+  ALUMNO
+  DOCENTE
+  ADMIN
+}
+
+enum EstadoMaterial {
+  ACTIVO
+  MANTENIMIENTO
+  BAJA
+}
+
+enum EstadoPrestamo {
+  PENDIENTE
+  ENTREGADO
+  DEVUELTO
+  RECHAZADO
+}
+
+enum Condicion {
+  BUENO
+  DANADO
+}
+
+// Padrón de alumnos y docentes activos (simula la validación institucional)
+model Padron {
+  matricula String  @id
+  nombre    String
+  rol       Rol
+  activo    Boolean @default(true)
+}
+
+model Usuario {
+  id             Int        @id @default(autoincrement())
+  matricula      String     @unique
+  nombre         String
+  correo         String     @unique
+  passwordHash   String
+  rol            Rol
+  intentos       Int        @default(0)
+  bloqueadoHasta DateTime?
+  creadoEn       DateTime   @default(now())
+  prestamos      Prestamo[]
+}
+
+model Material {
+  id            Int            @id @default(autoincrement())
+  nombre        String
+  cantidadTotal Int
+  estado        EstadoMaterial @default(ACTIVO)
+  prestamos     Prestamo[]
+}
+
+model Prestamo {
+  id                Int            @id @default(autoincrement())
+  usuarioId         Int
+  materialId        Int
+  cantidad          Int
+  estado            EstadoPrestamo @default(PENDIENTE)
+  fechaSolicitud    DateTime       @default(now())
+  fechaEntrega      DateTime?
+  fechaDevolucion   DateTime
+  fechaDevuelto     DateTime?
+  condicionEntrega  Condicion?
+  condicionDevuelto Condicion?
+  notasEntrega      String?
+  notasDevuelto     String?
+  usuario           Usuario        @relation(fields: [usuarioId], references: [id])
+  material          Material       @relation(fields: [materialId], references: [id])
+}

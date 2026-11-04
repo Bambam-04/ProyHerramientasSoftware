@@ -1,0 +1,21 @@
+{
+  "name": "cima-prototipo",
+  "version": "0.1.0",
+  "description": "Prototipo mínimo de CIMA para la Práctica #7 de testing manual",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "db:push": "prisma db push",
+    "db:seed": "node prisma/seed.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0"
+  }
+}

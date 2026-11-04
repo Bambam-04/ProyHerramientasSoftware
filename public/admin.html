@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CIMA — Administración</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header><h1>CIMA · Administración</h1><div><span id="quien"></span><button class="sec mini" onclick="salir()">Cerrar sesión</button></div></header>
+  <main>
+    <div id="msg" class="msg" role="alert"></div>
+    <section id="vencidos-box" hidden>
+      <h2>Préstamos vencidos</h2>
+      <div id="vencidos"></div>
+    </section>
+    <section>
+      <h2>Solicitudes pendientes</h2>
+      <table><thead><tr><th>Usuario</th><th>Material</th><th>Cant.</th><th>Devolver el</th><th>Estado al entregar</th><th></th></tr></thead>
+      <tbody id="pendientes"></tbody></table>
+    </section>
+    <section>
+      <h2>Préstamos entregados</h2>
+      <table><thead><tr><th>Usuario</th><th>Material</th><th>Cant.</th><th>Devolver el</th><th>Estado al devolver</th><th></th></tr></thead>
+      <tbody id="entregados"></tbody></table>
+    </section>
+    <section>
+      <h2>Historial</h2>
+      <table><thead><tr><th>Usuario</th><th>Material</th><th>Estado</th><th>Entrega</th><th>Devuelto</th><th>Condición</th></tr></thead>
+      <tbody id="historial"></tbody></table>
+    </section>
+    <section>
+      <h2>Inventario</h2>
+      <div class="fila">
+        <input id="nombre" placeholder="Nombre del material" aria-label="Nombre del material" style="min-width:220px">
+        <input id="total" type="number" value="1" aria-label="Cantidad total">
+        <button id="alta">Agregar material</button>
+      </div>
+      <table style="margin-top:12px"><thead><tr><th>Material</th><th>Estado</th><th>Total</th><th></th></tr></thead>
+      <tbody id="inventario"></tbody></table>
+    </section>
+  </main>
+  <script src="app.js"></script>
+  <script>
+    const COND = '<select class="cond"><option value="BUENO">Bueno</option><option value="DANADO">Dañado</option></select>';
+    if (requerirSesion({ admin: true })) iniciar();
+
+    async function cargar() {
+      const [todos, vencidos, mats] = await Promise.all([api('/api/admin/prestamos'), api('/api/admin/vencidos'), api('/api/materiales')]);
+      const box = document.getElementById('vencidos-box');
+      box.hidden = vencidos.length === 0;
+      document.getElementById('vencidos').innerHTML = vencidos.map((p) =>
+        `<div class="alerta">${esc(p.usuario.nombre)} (${esc(p.usuario.matricula)}) no devolvió ${p.cantidad} × ${esc(p.material.nombre)}. Debía entregarlo el ${fecha(p.fechaDevolucion)}.</div>`).join('');
+
+      const fila = (p, accion) => `<tr data-id="${p.id}"><td>${esc(p.usuario.nombre)}</td><td>${esc(p.material.nombre)}</td><td>${p.cantidad}</td><td>${fecha(p.fechaDevolucion)}</td><td>${COND}</td><td>${accion}</td></tr>`;
+      document.getElementById('pendientes').innerHTML = todos.filter((p) => p.estado === 'PENDIENTE').map((p) =>
+        fila(p, '<button class="mini" data-a="entregar">Entregar</button> <button class="mini peligro" data-a="rechazar">Rechazar</button>')).join('')
+        || '<tr><td colspan="6">No hay solicitudes pendientes.</td></tr>';
+      document.getElementById('entregados').innerHTML = todos.filter((p) => p.estado === 'ENTREGADO').map((p) =>
+        fila(p, '<button class="mini" data-a="devolver">Registrar devolución</button>')).join('')
+        || '<tr><td colspan="6">No hay préstamos activos.</td></tr>';
+      document.getElementById('historial').innerHTML = todos.map((p) =>
+        `<tr><td>${esc(p.usuario.nombre)}</td><td>${esc(p.material.nombre)}</td><td><span class="badge ${p.estado}">${p.estado.toLowerCase()}</span></td><td>${fecha(p.fechaEntrega)}</td><td>${fecha(p.fechaDevuelto)}</td><td>${p.condicionDevuelto ? p.condicionDevuelto.toLowerCase() : '—'}</td></tr>`).join('');
+      document.getElementById('inventario').innerHTML = mats.map((m) =>
+        `<tr><td>${esc(m.nombre)}</td><td><span class="badge ${esc(m.estado)}">${esc(m.estado)}</span></td><td>${m.cantidadTotal}</td><td><button class="mini peligro" data-baja="${m.id}">Dar de baja</button></td></tr>`).join('');
+    }
+
+    function iniciar() {
+      cargar().catch((e) => mostrar('msg', e.message, 'error'));
+      document.body.addEventListener('click', async (ev) => {
+        const b = ev.target.closest('button'); if (!b) return;
+        try {
+          let d;
+          if (b.dataset.a) {
+            const tr = b.closest('tr');
+            d = await api(`/api/admin/prestamos/${tr.dataset.id}/${b.dataset.a}`, { method: 'POST', body: { condicion: tr.querySelector('.cond').value } });
+          } else if (b.dataset.baja) {
+            d = await api(`/api/admin/materiales/${b.dataset.baja}/baja`, { method: 'POST' });
+          } else if (b.id === 'alta') {
+            await api('/api/admin/materiales', { method: 'POST', body: { nombre: document.getElementById('nombre').value, cantidadTotal: document.getElementById('total').value } });
+            d = { mensaje: 'Material agregado al inventario.' };
+          } else return;
+          mostrar('msg', d.mensaje, 'ok');
+          cargar();
+        } catch (e) { mostrar('msg', e.message, 'error'); }
+      });
+    }
+  </script>
+</body>
+</html>
