@@ -215,12 +215,16 @@ function editarMaterial(m) {
         !confirm('¿Dar de baja este material? Se conservará su historial.')
       )
         throw new Error('La baja requiere confirmación.');
-      await api(m ? `/api/admin/materiales/${m.id}` : '/api/admin/materiales', {
+      const r = await api(m ? `/api/admin/materiales/${m.id}` : '/api/admin/materiales', {
         method: m ? 'PATCH' : 'POST',
         body,
       });
       await cargarAdmin();
-      mensaje('Material guardado.');
+      mensaje(
+        r.reactivacion
+          ? `Material reactivado: ${r.reactivacion.liberadas} pieza(s) íntegra(s) volvieron a estar disponibles.${r.reactivacion.enRevision ? ` ${r.reactivacion.enRevision} pieza(s) con daño registrado siguen en mantenimiento; revísalas en «Piezas y códigos».` : ''}`
+          : 'Material guardado.',
+      );
     },
   );
 }

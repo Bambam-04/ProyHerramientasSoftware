@@ -5,6 +5,53 @@ async function runAutomation({ usuarioIds } = {}) {
   active = true;
   const scope = usuarioIds ? { usuarioId: { in: usuarioIds } } : {};
   try {
+    // Una solicitud pendiente que no se preparó antes de su hora de recolección más la
+    // tolerancia ya no puede entregarse: se cancela para liberar su reserva y la cola FIFO.
+    const reglas = await config();
+    const pendientes = await prisma.prestamo.findMany({
+      where: {
+        ...scope,
+        estado: 'PENDIENTE',
+        fechaRecoleccion: { lt: new Date(now().getTime() - reglas.toleranciaMinutos * 60000) },
+      },
+      select: { id: true },
+    });
+    for (const { id } of pendientes)
+      await transaction(async (tx) => {
+        const cfg = await config(tx);
+        const p = await tx.prestamo.findUnique({
+          where: { id },
+          include: { piezas: { include: { pieza: true } } },
+        });
+        if (
+          p.estado !== 'PENDIENTE' ||
+          !p.fechaRecoleccion ||
+          p.fechaRecoleccion.getTime() + cfg.toleranciaMinutos * 60000 >= now().getTime()
+        )
+          return;
+        const changed = await tx.prestamo.updateMany({
+          where: { id, estado: 'PENDIENTE' },
+          data: { estado: 'CANCELADO' },
+        });
+        if (!changed.count) return;
+        await tx.pieza.updateMany({
+          where: { id: { in: p.piezas.map((d) => d.piezaId) }, estado: 'RESERVADA' },
+          data: { estado: 'DISPONIBLE' },
+        });
+        await notify(
+          tx,
+          p.usuarioId,
+          'SOLICITUD_VENCIDA',
+          `La solicitud #${id} no pudo prepararse antes de la hora de recolección y se canceló automáticamente. El material quedó libre; puedes registrar una nueva solicitud.`,
+          `pendiente-vencida-${id}`,
+        );
+        await audit(tx, null, 'CANCELACION_AUTOMATICA_SOLICITUD_VENCIDA', 'PRESTAMOS', {
+          prestamoId: id,
+          fechaRecoleccion: p.fechaRecoleccion.toISOString(),
+        });
+        for (const materialId of new Set(p.piezas.map((d) => d.pieza.materialId)))
+          await notifyAvailability(tx, materialId);
+      });
     const expired = await prisma.prestamo.findMany({
       where: { ...scope, estado: 'PREPARADA', limiteRecogida: { lt: now() } },
       select: { id: true },

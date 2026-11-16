@@ -26,7 +26,7 @@ En **Consultar padrón del semestre** se muestran matrícula, carrera, periodo y
 
 En **Inventario**, **Agregar material** permite registrar nombre, categoría, características, fotografía y límite de préstamo en horas. La cantidad genera piezas individuales con códigos únicos. El catálogo del alumno se actualiza automáticamente.
 
-**Editar** modifica los datos y cantidades. Para disminuir una cantidad, las unidades deben estar disponibles. Las piezas reservadas o prestadas se gestionan desde ventanilla y bloquean cambios de estado o baja del material. **Piezas** muestra los códigos físicos y permite registrar revisión, mantenimiento, baja, pérdida o regreso a Disponible. Al liberar una pieza se debe registrar una condición segura. El material del catálogo también debe estar activo para que sus piezas sean solicitables.
+**Editar** modifica los datos y cantidades. Para disminuir una cantidad, las unidades deben estar disponibles. Las piezas reservadas o prestadas se gestionan desde ventanilla y bloquean cambios de estado o baja del material. **Piezas** muestra los códigos físicos y permite registrar revisión, mantenimiento, baja, pérdida o regreso a Disponible. Al liberar una pieza se debe registrar una condición segura. El material del catálogo también debe estar activo para que sus piezas sean solicitables. Al cambiar un material de En mantenimiento a Activo, sus piezas íntegras vuelven a estar disponibles; las que tienen daño registrado siguen en mantenimiento hasta revisarlas en **Piezas**.
 
 La carga masiva de inventario acepta CSV/XLSX con nombre, categoría, características, cantidad y maxHoras. Usa primero **Validar archivo** y después **Confirmar importación**. Si el material ya existe con el mismo nombre y categoría, las unidades se suman en lugar de duplicar el catálogo. Las piezas en mantenimiento no vuelven a estar disponibles al liquidar un convenio: se revisan por separado.
 
@@ -50,19 +50,19 @@ En **Reportes**, selecciona préstamos, materiales más solicitados, daños, pé
 
 ### Preparar y entregar
 
-La cola se actualiza automáticamente y presenta las solicitudes en orden de registro. Sólo puede prepararse la pendiente más antigua. Selecciona **Preparar** y confirma; el alumno recibe el código de recolección. El límite de recogida es la hora acordada más la tolerancia configurada al preparar. Si el alumno no llega a tiempo, el sistema marca la solicitud como No recogida y libera las piezas; también puedes hacerlo desde el botón habilitado cuando vence la tolerancia.
+La cola se actualiza automáticamente y presenta las solicitudes en orden de registro. Sólo puede prepararse la pendiente más antigua. Selecciona **Preparar** y confirma; el alumno recibe el código de recolección. El límite de recogida es la hora acordada más la tolerancia configurada al preparar. Si el alumno no llega a tiempo, el sistema marca la solicitud como No recogida y libera las piezas; también puedes hacerlo desde el botón habilitado cuando vence la tolerancia. Una solicitud pendiente que no se preparó antes de su hora de recolección más la tolerancia se cancela automáticamente, libera su material y deja de bloquear la cola.
 
 1. Escanea o escribe el **código de solicitud** presentado por el alumno y presiona Enter, o abre **Validar y entregar** en Preparadas.
 2. Verifica nombre, matrícula y datos de identificación del alumno; marca la confirmación de identidad.
 3. Selecciona fecha y hora de devolución. El máximo es el menor límite de los materiales del préstamo, contado desde la entrega. Si cae en fin de semana, el límite mostrado se ajusta al viernes anterior; selecciona una hora de ese viernes que no lo exceda.
-4. Escanea cada pieza física y selecciona obligatoriamente su estado de salida. El lector funciona como teclado y Enter avanza al siguiente campo de código.
+4. Escanea cada pieza física, en cualquier orden, y selecciona obligatoriamente su estado de salida. El lector funciona como teclado y Enter avanza al siguiente campo de código. Puedes entregar cualquier pieza disponible del material solicitado: el sistema reasigna la reserva a la pieza entregada. Cada lectura se valida al momento y muestra el material reconocido.
 5. Registra observaciones relevantes y confirma la entrega.
 
-Un código ajeno, duplicado o faltante bloquea la entrega. No puede entregarse una solicitud pendiente sin prepararla ni material dañado o roto. Los materiales sólo pueden usarse dentro de la Facultad de Ciencias Químicas e Ingeniería.
+Los códigos de pieza no se muestran en ventanilla; deben leerse de la etiqueta física. Una pieza de otro material, ya reservada o prestada en otra solicitud, duplicada o faltante bloquea la entrega. No puede entregarse una solicitud pendiente sin prepararla ni material dañado o roto. Los materiales sólo pueden usarse dentro de la Facultad de Ciencias Químicas e Ingeniería.
 
 ### Devolver y resolver defectos previos
 
-En **En préstamo**, elige **Registrar devolución**. Escanea todas las piezas y registra su condición: Íntegro, Rayado, Astillado, Dañado o Roto. Para una pieza faltante, ingresa su código y selecciona Perdido. Cada pieza admite una observación. Confirma los estados antes de guardar.
+En **En préstamo**, elige **Registrar devolución**. Escanea las piezas devueltas en cualquier orden y registra su condición: Íntegro, Rayado, Astillado, Dañado o Roto. Si falta alguna, el formulario indica qué material quedó sin escanear; marca que no fue devuelta para registrarla como perdida. Cada pieza admite una observación. Confirma los estados antes de guardar.
 
 Si todo regresa íntegro, el préstamo se cierra y las piezas vuelven a disponibilidad. Una pieza con daño nuevo o pérdida genera automáticamente incidencia y adeudo; el préstamo queda Con incidencia y el alumno debe acudir con el administrador para formalizar la reposición. La pieza dañada se separa del inventario disponible sin afectar las demás unidades sanas.
 

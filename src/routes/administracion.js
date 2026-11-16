@@ -134,6 +134,17 @@ async function addPieces(tx, materialId, count, state = 'DISPONIBLE') {
   }));
   if (data.length) await tx.pieza.createMany({ data });
 }
+// Al reactivar un material en mantenimiento, sus piezas íntegras vuelven a estar disponibles.
+// Las piezas con daño registrado (rayado, astillado, dañado, roto) permanecen en
+// mantenimiento hasta que el administrador las revise individualmente (RF-SIS-02.4).
+async function releaseMaintenance(tx, materialId) {
+  const released = await tx.pieza.updateMany({
+    where: { materialId, estado: 'MANTENIMIENTO', condicion: { in: ['INTEGRO', 'BUENO'] } },
+    data: { estado: 'DISPONIBLE' },
+  });
+  const pending = await tx.pieza.count({ where: { materialId, estado: 'MANTENIMIENTO' } });
+  return { liberadas: released.count, enRevision: pending };
+}
 async function syncQuantity(tx, materialId) {
   const cantidadTotal = await tx.pieza.count({
     where: { materialId, estado: { notIn: ['BAJA', 'PERDIDA'] } },
@@ -371,18 +382,27 @@ router.patch(
           where: { materialId, estado: 'DISPONIBLE' },
           data: { estado: 'MANTENIMIENTO' },
         });
+      const reactivacion =
+        data.estado === 'ACTIVO' && previous.estado === 'MANTENIMIENTO'
+          ? await releaseMaintenance(tx, materialId)
+          : undefined;
       await tx.material.update({ where: { id: materialId }, data });
       await syncQuantity(tx, materialId);
       await audit(tx, req.usuario, 'MODIFICAR_MATERIAL', 'MATERIALES', {
         materialId,
         cambios: { ...data, fotografia: data.fotografia ? '(imagen)' : data.fotografia },
+        ...(reactivacion ? { reactivacion } : {}),
       });
       if (
         (data.estado ?? previous.estado) === 'ACTIVO' &&
         ((data.cantidadTotal || 0) > active.length || previous.estado !== 'ACTIVO')
       )
         await notifyAvailability(tx, materialId);
-      return tx.material.findUnique({ where: { id: materialId }, include: { piezas: true } });
+      const material = await tx.material.findUnique({
+        where: { id: materialId },
+        include: { piezas: true },
+      });
+      return reactivacion ? { ...material, reactivacion } : material;
     });
     res.json(result);
   }),
@@ -775,6 +795,8 @@ router.post(
             },
           });
         else material = await tx.material.create({ data: { ...metadata, cantidadTotal: units } });
+        if (current?.estado === 'MANTENIMIENTO' && material.estado === 'ACTIVO')
+          await releaseMaintenance(tx, material.id);
         if (material.estado === 'MANTENIMIENTO')
           await tx.pieza.updateMany({
             where: { materialId: material.id, estado: 'DISPONIBLE' },

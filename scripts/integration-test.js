@@ -371,6 +371,106 @@ async function stockAndFifo() {
   console.log('Concurrencia, FIFO, cancelaciones, códigos y límites de entrega: correcto.');
 }
 
+// Entrega por material (sin orden ni pieza fija), reactivación de material y vencimiento
+// automático de solicitudes pendientes que no se prepararon a tiempo.
+async function substitutionMaintenanceAndExpiry() {
+  const vasos = await material('vasos sustituibles', 3);
+  const ajeno = await material('material ajeno', 1);
+  const p = await reservar(users.uno, [vasos]);
+  await preparar(p.id);
+  const antes = await loan(p.id);
+  const reservada = antes.piezas[0].pieza;
+  const libre = await prisma.pieza.findFirst({
+    where: { materialId: vasos.id, estado: 'DISPONIBLE' },
+  });
+  const otra = await prisma.pieza.findFirst({ where: { materialId: ajeno.id } });
+  await entregar(p.id, { piezas: [{ codigo: otra.codigo, condicion: 'INTEGRO' }] }, 409);
+  const consulta = await request('GET', `/operacion/piezas/codigo/${libre.codigo}`, {
+    token: users.encargado.token,
+  });
+  assert.equal(consulta.materialId, vasos.id);
+  await request('GET', '/operacion/piezas/codigo/NO-EXISTE', {
+    token: users.encargado.token,
+    status: 404,
+  });
+  await request('GET', `/operacion/piezas/codigo/${libre.codigo}`, {
+    token: users.uno.token,
+    status: 403,
+  });
+  await entregar(p.id, { piezas: [{ codigo: libre.codigo, condicion: 'INTEGRO' }] });
+  const despues = await loan(p.id);
+  assert.equal(despues.estado, 'ENTREGADO');
+  assert.equal(despues.piezas.length, 1);
+  assert.equal(despues.piezas[0].piezaId, libre.id, 'La reserva se reasigna a la pieza entregada.');
+  assert.equal(despues.piezas[0].pieza.estado, 'PRESTADA');
+  assert.equal(
+    (await prisma.pieza.findUnique({ where: { id: reservada.id } })).estado,
+    'DISPONIBLE',
+    'La pieza reservada originalmente vuelve al inventario.',
+  );
+  await devolver(p.id);
+
+  const piezas = await prisma.pieza.findMany({
+    where: { materialId: vasos.id },
+    orderBy: { id: 'asc' },
+  });
+  await request('PATCH', `/admin/piezas/${piezas[0].id}`, {
+    token: users.admin.token,
+    body: { estado: 'MANTENIMIENTO', condicion: 'DANADO' },
+  });
+  await request('PATCH', `/admin/materiales/${vasos.id}`, {
+    token: users.admin.token,
+    body: { estado: 'MANTENIMIENTO' },
+  });
+  assert.equal(
+    await prisma.pieza.count({ where: { materialId: vasos.id, estado: 'MANTENIMIENTO' } }),
+    3,
+  );
+  const reactivado = await request('PATCH', `/admin/materiales/${vasos.id}`, {
+    token: users.admin.token,
+    body: { estado: 'ACTIVO' },
+  });
+  assert.deepEqual(reactivado.reactivacion, { liberadas: 2, enRevision: 1 });
+  assert.equal(
+    (await prisma.pieza.findUnique({ where: { id: piezas[0].id } })).estado,
+    'MANTENIMIENTO',
+    'La pieza dañada sigue en revisión tras reactivar el material.',
+  );
+  const catalogo = await request('GET', `/materiales?q=${encodeURIComponent(vasos.nombre)}`, {
+    token: users.uno.token,
+  });
+  assert.equal(catalogo[0].estado, 'Disponible');
+  assert.equal(catalogo[0].disponibles, 2);
+
+  const vencida = await reservar(users.uno, [vasos]);
+  const siguiente = await reservar(users.dos, [vasos]);
+  const cfg = await config();
+  await prisma.prestamo.update({
+    where: { id: vencida.id },
+    data: { fechaRecoleccion: new Date(CLOCK - (cfg.toleranciaMinutos + 1) * 60000) },
+  });
+  await request('POST', `/operacion/prestamos/${vencida.id}/preparar`, {
+    token: users.encargado.token,
+    status: 409,
+  });
+  await preparar(siguiente.id);
+  await runAutomation({ usuarioIds: [users.uno.id, users.dos.id] });
+  const cancelada = await loan(vencida.id);
+  assert.equal(cancelada.estado, 'CANCELADO');
+  assert.ok(cancelada.piezas.every((pp) => pp.pieza.estado === 'DISPONIBLE'));
+  assert.ok(
+    await prisma.notificacion.count({
+      where: { usuarioId: users.uno.id, tipo: 'SOLICITUD_VENCIDA' },
+    }),
+  );
+  await request('POST', `/operacion/prestamos/${siguiente.id}/rechazar`, {
+    token: users.encargado.token,
+  });
+  console.log(
+    'Entrega por material con reasignación, reactivación de inventario y vencimiento de pendientes: correcto.',
+  );
+}
+
 async function additionalGuards() {
   const expiredToken = jwt.sign(
     { id: users.uno.id, version: users.uno.sessionVersion },
@@ -981,6 +1081,7 @@ async function cleanup() {
     await fixtureUsers();
     await authChecks();
     await stockAndFifo();
+    await substitutionMaintenanceAndExpiry();
     await previousDefect();
     await incidentAndAgreement();
     await automationChecks();

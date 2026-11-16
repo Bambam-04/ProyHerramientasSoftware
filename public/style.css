@@ -681,6 +681,16 @@ details.subform > summary {
   margin: 0;
   font-size: 0.87rem;
 }
+.lectura-ok {
+  color: #1a6841;
+}
+.lectura-error {
+  color: var(--red);
+  font-weight: 600;
+}
+.scan-input[aria-invalid] {
+  border-color: var(--red);
+}
 .scan-input {
   font-family: ui-monospace, monospace;
   font-size: 1.05rem;

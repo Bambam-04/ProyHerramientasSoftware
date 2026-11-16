@@ -104,6 +104,64 @@ function validarPiezas(loan, lecturas) {
   return esperadas;
 }
 
+// RN-09 / RF-ENC-06.2: en la entrega, cada pieza escaneada debe corresponder a un material
+// solicitado. El encargado puede entregar cualquier pieza disponible de ese material, sin
+// depender de la pieza reservada al registrar la solicitud ni del orden de lectura; la
+// reserva original se reasigna a la pieza física entregada.
+async function asignarPiezasEntrega(tx, loan, lecturas) {
+  const requeridas = new Map();
+  for (const pp of loan.piezas) {
+    if (!requeridas.has(pp.pieza.materialId)) requeridas.set(pp.pieza.materialId, []);
+    requeridas.get(pp.pieza.materialId).push(pp);
+  }
+  const propias = new Map(loan.piezas.map((pp) => [pp.piezaId, pp]));
+  const encontradas = await tx.pieza.findMany({
+    where: { codigo: { in: lecturas.map((l) => l.codigo) } },
+    include: { material: true },
+  });
+  const porCodigo = new Map(encontradas.map((p) => [p.codigo, p]));
+  const escaneadas = new Map();
+  for (const lectura of lecturas) {
+    const pieza = porCodigo.get(lectura.codigo);
+    if (!pieza || !requeridas.has(pieza.materialId))
+      fail(
+        409,
+        `La pieza ${lectura.codigo} no corresponde a los materiales de esta solicitud. La entrega fue bloqueada.`,
+      );
+    if (!propias.has(pieza.id) && pieza.estado !== 'DISPONIBLE')
+      fail(
+        409,
+        `La pieza ${lectura.codigo} no está disponible (está reservada, prestada o fuera de servicio). Escanea otra pieza de ${pieza.material.nombre}.`,
+      );
+    if (!escaneadas.has(pieza.materialId)) escaneadas.set(pieza.materialId, []);
+    escaneadas.get(pieza.materialId).push({ lectura, pieza });
+  }
+  for (const [materialId, reservadas] of requeridas) {
+    const leidas = escaneadas.get(materialId)?.length || 0;
+    if (leidas !== reservadas.length)
+      fail(
+        400,
+        `Escanea ${reservadas.length} pieza(s) de ${reservadas[0].pieza.material.nombre}; se leyeron ${leidas}.`,
+      );
+  }
+  const asignaciones = [];
+  for (const [materialId, reservadas] of requeridas) {
+    const leidas = escaneadas.get(materialId);
+    const ids = new Set(leidas.map((x) => x.pieza.id));
+    // Registros cuya pieza reservada no se entregó: se reasignan a las piezas sustitutas.
+    const sinEntregar = reservadas.filter((pp) => !ids.has(pp.piezaId));
+    for (const { lectura, pieza } of leidas) {
+      const propia = propias.get(pieza.id);
+      asignaciones.push(
+        propia
+          ? { lectura, pieza, registro: propia, sustituye: false }
+          : { lectura, pieza, registro: sinEntregar.shift(), sustituye: true },
+      );
+    }
+  }
+  return asignaciones;
+}
+
 async function buscarPrestamo(tx, prestamoId, usuarioId) {
   const loan = await tx.prestamo.findUnique({ where: { id: prestamoId }, include: loanInclude });
   if (!loan || (usuarioId !== undefined && loan.usuarioId !== usuarioId))
@@ -417,6 +475,27 @@ router.get(
   }),
 );
 
+// Identifica una pieza escaneada para validar cada lectura en ventanilla al momento.
+router.get(
+  '/operacion/piezas/codigo/:codigo',
+  operativo,
+  asyncHandler(async (req, res) => {
+    const codigo = texto(req.params.codigo, 'Código de pieza', 100);
+    const pieza = await prisma.pieza.findUnique({
+      where: { codigo },
+      select: {
+        codigo: true,
+        estado: true,
+        condicion: true,
+        materialId: true,
+        material: { select: { nombre: true, estado: true } },
+      },
+    });
+    if (!pieza) fail(404, `La pieza ${codigo} no está registrada en el inventario.`);
+    res.json(pieza);
+  }),
+);
+
 router.post(
   '/operacion/prestamos/:id/preparar',
   operativo,
@@ -425,11 +504,33 @@ router.post(
     const result = await transaction(async (tx) => {
       const loan = await buscarPrestamo(tx, prestamoId);
       if (loan.estado !== 'PENDIENTE') fail(409, 'Solo se pueden preparar solicitudes pendientes.');
+      const cfg = await config(tx);
+      const instante = now();
+      // Las pendientes cuya recolección y tolerancia ya vencieron no bloquean la cola FIFO;
+      // la revisión automática las cancela y libera su material.
       const primera = await tx.prestamo.findFirst({
-        where: { estado: 'PENDIENTE' },
+        where: {
+          estado: 'PENDIENTE',
+          OR: [
+            { fechaRecoleccion: null },
+            {
+              fechaRecoleccion: {
+                gte: new Date(instante.getTime() - cfg.toleranciaMinutos * 60000),
+              },
+            },
+          ],
+        },
         orderBy: [{ fechaSolicitud: 'asc' }, { id: 'asc' }],
         select: { id: true },
       });
+      if (
+        loan.fechaRecoleccion &&
+        loan.fechaRecoleccion.getTime() + cfg.toleranciaMinutos * 60000 <= instante.getTime()
+      )
+        fail(
+          409,
+          'La hora de recolección y su tolerancia ya vencieron. La solicitud se cancelará automáticamente y su material quedará libre.',
+        );
       if (!primera || primera.id !== loan.id)
         fail(409, 'Atiende primero la solicitud pendiente más antigua de la cola.');
       if (
@@ -442,18 +543,11 @@ router.post(
           409,
           'El material reservado no está listo para entregarse. Revisa la solicitud antes de prepararla.',
         );
-      const cfg = await config(tx);
-      const instante = now();
       if (!loan.fechaRecoleccion)
         fail(409, 'La solicitud no tiene una hora de recolección válida.');
       const limiteRecogida = new Date(
         loan.fechaRecoleccion.getTime() + cfg.toleranciaMinutos * 60000,
       );
-      if (limiteRecogida <= instante)
-        fail(
-          409,
-          'La hora de recolección y su tolerancia ya vencieron. Rechaza la solicitud y pide al alumno que registre otra.',
-        );
       const codigo = `CIMA-${randomBytes(12).toString('hex').toUpperCase()}`;
       await cambiarEstado(tx, loan, 'PENDIENTE', {
         estado: 'PREPARADA',
@@ -569,13 +663,13 @@ router.post(
       const cuenta = await eligibility(tx, loan.usuarioId);
       if (!cuenta.puedeSolicitar)
         fail(403, cuenta.motivo || 'La cuenta del alumno está restringida para nuevos préstamos.');
-      const esperadas = validarPiezas(loan, lecturas);
       if (
         loan.piezas.some(
           (p) => p.pieza.estado !== 'RESERVADA' || p.pieza.material.estado !== 'ACTIVO',
         )
       )
         fail(409, 'Hay piezas reservadas fuera de servicio. No se puede registrar la entrega.');
+      const asignaciones = await asignarPiezasEntrega(tx, loan, lecturas);
       const cfg = await config(tx);
       const maxHoras = Math.min(...loan.piezas.map((p) => p.pieza.material.maxHoras));
       const limite = maxReturn(instante, maxHoras, cfg.horaCierre);
@@ -592,18 +686,31 @@ router.post(
         encargadoEntregaId: req.usuario.id,
         condicionEntrega: lecturas.every((p) => p.condicion === 'INTEGRO') ? 'INTEGRO' : null,
       });
-      for (const lectura of lecturas) {
-        const esperada = esperadas.get(lectura.codigo);
-        await tx.prestamoPieza.update({
-          where: { id: esperada.id },
-          data: { condicionEntrega: lectura.condicion, notasEntrega: lectura.notas },
-        });
+      const sustituciones = [];
+      for (const { lectura, pieza, registro, sustituye } of asignaciones) {
+        if (sustituye) {
+          const liberada = await tx.pieza.updateMany({
+            where: { id: registro.piezaId, estado: 'RESERVADA' },
+            data: { estado: 'DISPONIBLE' },
+          });
+          if (liberada.count !== 1)
+            fail(409, 'Una pieza cambió de estado. Actualiza la solicitud antes de continuar.');
+          sustituciones.push({ reservada: registro.pieza.codigo, entregada: pieza.codigo });
+        }
         const changed = await tx.pieza.updateMany({
-          where: { id: esperada.piezaId, estado: 'RESERVADA' },
+          where: { id: pieza.id, estado: sustituye ? 'DISPONIBLE' : 'RESERVADA' },
           data: { estado: 'PRESTADA', condicion: lectura.condicion },
         });
         if (changed.count !== 1)
           fail(409, 'Una pieza cambió de estado. Actualiza la solicitud antes de continuar.');
+        await tx.prestamoPieza.update({
+          where: { id: registro.id },
+          data: {
+            piezaId: pieza.id,
+            condicionEntrega: lectura.condicion,
+            notasEntrega: lectura.notas,
+          },
+        });
       }
       await notify(
         tx,
@@ -617,6 +724,7 @@ router.post(
         identidadVerificada: true,
         fechaDevolucion: fechaDevolucion.toISOString(),
         piezas: lecturas,
+        sustituciones,
       });
     });
     res.json({

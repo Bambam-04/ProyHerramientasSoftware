@@ -278,10 +278,12 @@ async function studentAndOperation(materials) {
     where: { id: loanId },
     include: { piezas: { include: { pieza: true }, orderBy: { id: 'asc' } } },
   });
-  for (const [n, pp] of current.piezas.entries()) {
-    await encargado.locator(`#piece-code-${n}`).fill(pp.pieza.codigo);
+  // El escaneo no depende del orden: se leen las piezas en orden inverso.
+  const invertidos = current.piezas.map((pp) => pp.pieza.codigo).reverse();
+  for (let n = 0; n < invertidos.length; n++) {
+    await encargado.locator(`#piece-code-${n}`).fill(invertidos[n]);
     await encargado.locator(`#piece-code-${n}`).press('Enter');
-    if (n + 1 < current.piezas.length)
+    if (n + 1 < invertidos.length)
       await expect(encargado.locator(`#piece-code-${n + 1}`)).toBeFocused();
     await encargado.locator(`#piece-condition-${n}`).selectOption('INTEGRO');
     await encargado.locator(`#piece-notes-${n}`).fill('Salida íntegra verificada con lector.');
@@ -300,8 +302,8 @@ async function studentAndOperation(materials) {
   await encargado.locator('[data-tab="entregados"]').click();
   await encargado.locator(`[data-devolver="${loanId}"]`).click();
   await expect(encargado.locator('#dialogo')).toBeVisible();
-  for (const [n, pp] of current.piezas.entries()) {
-    await encargado.locator(`#piece-code-${n}`).fill(pp.pieza.codigo);
+  for (let n = 0; n < invertidos.length; n++) {
+    await encargado.locator(`#piece-code-${n}`).fill(invertidos[n]);
     await encargado.locator(`#piece-condition-${n}`).selectOption('INTEGRO');
     await encargado.locator(`#piece-notes-${n}`).fill('Regreso íntegro y completo.');
   }
