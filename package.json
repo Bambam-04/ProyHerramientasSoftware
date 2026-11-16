@@ -1,21 +1,38 @@
 {
-  "name": "cima-prototipo",
-  "version": "0.1.0",
-  "description": "Prototipo mínimo de CIMA para la Práctica #7 de testing manual",
+  "name": "cima",
+  "version": "1.0.0",
+  "description": "Control de inventario, préstamos por pieza, incidencias y convenios de almacén FCQI",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "db:push": "prisma db push",
-    "db:seed": "node prisma/seed.js"
+    "start": "node scripts/run.js src/server.js",
+    "setup": "node scripts/configure-local.js && npm run db:generate && npm run db:push && npm run db:seed && npm run db:prepare",
+    "test": "node scripts/run.js scripts/integration-test.js && node scripts/run.js scripts/migration-test.js",
+    "test:ui": "node scripts/run.js scripts/ui-test.js",
+    "format": "prettier --write \"src/**/*.js\" \"public/**/*.{js,html,css}\" \"scripts/*.js\" \"prisma/*.js\"",
+    "test:smoke": "node scripts/run.js scripts/smoke-test.js",
+    "backup": "node scripts/run.js scripts/backup.js",
+    "db:prepare": "node scripts/run.js scripts/prepare.js",
+    "db:push": "node scripts/run.js scripts/sync-db.js",
+    "db:generate": "node scripts/run.js node_modules/prisma/build/index.js generate",
+    "db:seed": "node scripts/run.js prisma/seed.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
     "express": "^4.19.2",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "pdfkit": "^0.17.2"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "11.1.1"
+    }
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "prettier": "^3.6.2",
     "prisma": "^5.22.0"
   }
 }

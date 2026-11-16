@@ -21,17 +21,46 @@ async function main() {
   await prisma.usuario.upsert({
     where: { correo: `admin@${dominio}` },
     update: {},
-    create: { matricula: '0000001', nombre: 'Administrador CIMA', correo: `admin@${dominio}`, passwordHash: hash('Admin1234'), rol: 'ADMIN' },
+    create: {
+      matricula: '0000001',
+      nombre: 'Administrador CIMA',
+      correo: `admin@${dominio}`,
+      passwordHash: hash('Admin1234'),
+      rol: 'ADMIN',
+    },
   });
   const alumno = await prisma.usuario.upsert({
     where: { correo: `alumno@${dominio}` },
     update: {},
-    create: { matricula: '1234567', nombre: 'Ana López Ruiz', correo: `alumno@${dominio}`, passwordHash: hash('Alumno1234'), rol: 'ALUMNO' },
+    create: {
+      matricula: '1234567',
+      nombre: 'Ana López Ruiz',
+      correo: `alumno@${dominio}`,
+      passwordHash: hash('Alumno1234'),
+      rol: 'ALUMNO',
+    },
+  });
+  await prisma.usuario.upsert({
+    where: { correo: `ventanilla@${dominio}` },
+    update: {},
+    create: {
+      matricula: 'ENC-DEMO',
+      nombre: 'Encargado de Ventanilla',
+      correo: `ventanilla@${dominio}`,
+      passwordHash: hash('Ventanilla1234'),
+      rol: 'ENCARGADO',
+    },
   });
   await prisma.usuario.upsert({
     where: { correo: `docente@${dominio}` },
     update: {},
-    create: { matricula: '1111111', nombre: 'Dr. Mario Peña', correo: `docente@${dominio}`, passwordHash: hash('Docente1234'), rol: 'DOCENTE' },
+    create: {
+      matricula: '1111111',
+      nombre: 'Dr. Mario Peña',
+      correo: `docente@${dominio}`,
+      passwordHash: hash('Docente1234'),
+      rol: 'DOCENTE',
+    },
   });
 
   if ((await prisma.material.count()) === 0) {
@@ -45,16 +74,47 @@ async function main() {
         { nombre: 'Espectrofotómetro', cantidadTotal: 1, estado: 'MANTENIMIENTO' },
       ],
     });
-    // Préstamo ya vencido para probar PRE-08
-    const balanza = await prisma.material.findFirst({ where: { nombre: 'Balanza analítica' } });
-    await prisma.prestamo.create({
-      data: {
-        usuarioId: alumno.id, materialId: balanza.id, cantidad: 1, estado: 'ENTREGADO',
-        fechaEntrega: new Date(Date.now() - 5 * 86400000), fechaDevolucion: new Date(Date.now() - 86400000), condicionEntrega: 'BUENO',
-      },
+  }
+  const examples = [
+    [
+      'Microscopio óptico',
+      'Óptica',
+      'Microscopio para observación de muestras en el laboratorio.',
+      4,
+    ],
+    [
+      'Multímetro digital',
+      'Medición',
+      'Medición de voltaje, corriente y resistencia eléctrica.',
+      8,
+    ],
+    ['Balanza analítica', 'Medición', 'Balanza de precisión; mantener nivelada y limpia.', 4],
+    [
+      'Matraz Erlenmeyer 250 ml',
+      'Cristalería',
+      'Matraz de vidrio de 250 ml para prácticas de laboratorio.',
+      24,
+    ],
+    ['Kit de pipetas', 'Cristalería', 'Kit para medición y transferencia de líquidos.', 24],
+    [
+      'Espectrofotómetro',
+      'Medición',
+      'Equipo para análisis de absorbancia; requiere revisión de mantenimiento.',
+      4,
+    ],
+  ];
+  for (const [nombre, categoria, caracteristicas, maxHoras] of examples) {
+    await prisma.material.updateMany({
+      where: { nombre, categoria: 'General', caracteristicas: '' },
+      data: { categoria, caracteristicas, maxHoras, fotografia: '/material-placeholder.svg' },
     });
   }
   console.log('Datos de prueba listos.');
 }
 
-main().finally(() => prisma.$disconnect());
+main()
+  .catch((error) => {
+    console.error('No se pudieron preparar los datos de demostración:', error.code || error.name);
+    process.exitCode = 1;
+  })
+  .finally(() => prisma.$disconnect());

@@ -1,90 +1,475 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es">
-<head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CIMA — Administración</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <header><h1>CIMA · Administración</h1><div><span id="quien"></span><button class="sec mini" onclick="salir()">Cerrar sesión</button></div></header>
-  <main>
-    <div id="msg" class="msg" role="alert"></div>
-    <section id="vencidos-box" hidden>
-      <h2>Préstamos vencidos</h2>
-      <div id="vencidos"></div>
-    </section>
-    <section>
-      <h2>Solicitudes pendientes</h2>
-      <table><thead><tr><th>Usuario</th><th>Material</th><th>Cant.</th><th>Devolver el</th><th>Estado al entregar</th><th></th></tr></thead>
-      <tbody id="pendientes"></tbody></table>
-    </section>
-    <section>
-      <h2>Préstamos entregados</h2>
-      <table><thead><tr><th>Usuario</th><th>Material</th><th>Cant.</th><th>Devolver el</th><th>Estado al devolver</th><th></th></tr></thead>
-      <tbody id="entregados"></tbody></table>
-    </section>
-    <section>
-      <h2>Historial</h2>
-      <table><thead><tr><th>Usuario</th><th>Material</th><th>Estado</th><th>Entrega</th><th>Devuelto</th><th>Condición</th></tr></thead>
-      <tbody id="historial"></tbody></table>
-    </section>
-    <section>
-      <h2>Inventario</h2>
-      <div class="fila">
-        <input id="nombre" placeholder="Nombre del material" aria-label="Nombre del material" style="min-width:220px">
-        <input id="total" type="number" value="1" aria-label="Cantidad total">
-        <button id="alta">Agregar material</button>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>CIMA · Administración</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="admin.html"
+        ><span class="brand-mark">C</span
+        ><span><strong>CIMA</strong><small>Administración · FCQI</small></span></a
+      >
+      <div class="header-actions">
+        <a class="button sec mini" href="operacion.html">Ir a ventanilla</a><span id="quien"></span
+        ><button class="sec mini" data-password>Contraseña</button
+        ><button class="sec mini" data-salir>Cerrar sesión</button>
       </div>
-      <table style="margin-top:12px"><thead><tr><th>Material</th><th>Estado</th><th>Total</th><th></th></tr></thead>
-      <tbody id="inventario"></tbody></table>
-    </section>
-  </main>
-  <script src="app.js"></script>
-  <script>
-    const COND = '<select class="cond"><option value="BUENO">Bueno</option><option value="DANADO">Dañado</option></select>';
-    if (requerirSesion({ admin: true })) iniciar();
-
-    async function cargar() {
-      const [todos, vencidos, mats] = await Promise.all([api('/api/admin/prestamos'), api('/api/admin/vencidos'), api('/api/materiales')]);
-      const box = document.getElementById('vencidos-box');
-      box.hidden = vencidos.length === 0;
-      document.getElementById('vencidos').innerHTML = vencidos.map((p) =>
-        `<div class="alerta">${esc(p.usuario.nombre)} (${esc(p.usuario.matricula)}) no devolvió ${p.cantidad} × ${esc(p.material.nombre)}. Debía entregarlo el ${fecha(p.fechaDevolucion)}.</div>`).join('');
-
-      const fila = (p, accion) => `<tr data-id="${p.id}"><td>${esc(p.usuario.nombre)}</td><td>${esc(p.material.nombre)}</td><td>${p.cantidad}</td><td>${fecha(p.fechaDevolucion)}</td><td>${COND}</td><td>${accion}</td></tr>`;
-      document.getElementById('pendientes').innerHTML = todos.filter((p) => p.estado === 'PENDIENTE').map((p) =>
-        fila(p, '<button class="mini" data-a="entregar">Entregar</button> <button class="mini peligro" data-a="rechazar">Rechazar</button>')).join('')
-        || '<tr><td colspan="6">No hay solicitudes pendientes.</td></tr>';
-      document.getElementById('entregados').innerHTML = todos.filter((p) => p.estado === 'ENTREGADO').map((p) =>
-        fila(p, '<button class="mini" data-a="devolver">Registrar devolución</button>')).join('')
-        || '<tr><td colspan="6">No hay préstamos activos.</td></tr>';
-      document.getElementById('historial').innerHTML = todos.map((p) =>
-        `<tr><td>${esc(p.usuario.nombre)}</td><td>${esc(p.material.nombre)}</td><td><span class="badge ${p.estado}">${p.estado.toLowerCase()}</span></td><td>${fecha(p.fechaEntrega)}</td><td>${fecha(p.fechaDevuelto)}</td><td>${p.condicionDevuelto ? p.condicionDevuelto.toLowerCase() : '—'}</td></tr>`).join('');
-      document.getElementById('inventario').innerHTML = mats.map((m) =>
-        `<tr><td>${esc(m.nombre)}</td><td><span class="badge ${esc(m.estado)}">${esc(m.estado)}</span></td><td>${m.cantidadTotal}</td><td><button class="mini peligro" data-baja="${m.id}">Dar de baja</button></td></tr>`).join('');
-    }
-
-    function iniciar() {
-      cargar().catch((e) => mostrar('msg', e.message, 'error'));
-      document.body.addEventListener('click', async (ev) => {
-        const b = ev.target.closest('button'); if (!b) return;
-        try {
-          let d;
-          if (b.dataset.a) {
-            const tr = b.closest('tr');
-            d = await api(`/api/admin/prestamos/${tr.dataset.id}/${b.dataset.a}`, { method: 'POST', body: { condicion: tr.querySelector('.cond').value } });
-          } else if (b.dataset.baja) {
-            d = await api(`/api/admin/materiales/${b.dataset.baja}/baja`, { method: 'POST' });
-          } else if (b.id === 'alta') {
-            await api('/api/admin/materiales', { method: 'POST', body: { nombre: document.getElementById('nombre').value, cantidadTotal: document.getElementById('total').value } });
-            d = { mensaje: 'Material agregado al inventario.' };
-          } else return;
-          mostrar('msg', d.mensaje, 'ok');
-          cargar();
-        } catch (e) { mostrar('msg', e.message, 'error'); }
-      });
-    }
-  </script>
-</body>
+    </header>
+    <main class="shell">
+      <div class="page-head">
+        <div>
+          <p class="eyebrow">Administración del almacén</p>
+          <h1>Todo en orden para la práctica</h1>
+          <p class="muted">Gestiona el inventario, las cuentas y los acuerdos de reposición.</p>
+        </div>
+        <span class="live">Datos actualizados cada 5 segundos</span>
+      </div>
+      <div id="msg" class="msg" role="alert" hidden></div>
+      <div id="conexion" class="msg" role="status" hidden></div>
+      <div class="stats">
+        <div class="stat">
+          <span>Materiales en catálogo</span><strong id="stat-materiales">0</strong>
+        </div>
+        <div class="stat"><span>Piezas disponibles</span><strong id="stat-piezas">0</strong></div>
+        <div class="stat">
+          <span>Incidencias pendientes</span><strong id="stat-incidencias">0</strong>
+        </div>
+        <div class="stat"><span>Convenios activos</span><strong id="stat-convenios">0</strong></div>
+      </div>
+      <nav class="tabs" aria-label="Administración">
+        <button class="selected" data-tab="inventario" aria-current="page">Inventario</button
+        ><button data-tab="usuarios">Usuarios y padrón</button
+        ><button data-tab="incidencias">Incidencias y convenios</button
+        ><button data-tab="reportes">Reportes</button><button data-tab="actividad">Bitácora</button
+        ><button data-tab="configuracion">Configuración</button
+        ><button data-tab="avisos">Avisos y prácticas</button>
+      </nav>
+      <section class="card" data-panel="inventario">
+        <div class="section-head">
+          <div>
+            <h2>Catálogo e inventario por pieza</h2>
+            <p class="small muted">Cada pieza tiene un código único y conserva su historial.</p>
+          </div>
+          <button id="nuevo-material">Agregar material</button>
+        </div>
+        <div class="toolbar">
+          <div>
+            <label for="inventario-buscar">Buscar material o categoría</label
+            ><input id="inventario-buscar" type="search" />
+          </div>
+          <div>
+            <label for="inventario-estado">Estado</label
+            ><select id="inventario-estado">
+              <option value="">Todos</option>
+              <option value="ACTIVO">Activo</option>
+              <option value="MANTENIMIENTO">En mantenimiento</option>
+              <option value="BAJA">Baja</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Material</th>
+                <th>Estado</th>
+                <th>Unidades</th>
+                <th>Tiempo máximo</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="inventario"></tbody>
+          </table>
+        </div>
+        <details class="subform" style="margin-top: 20px">
+          <summary>Importar inventario desde CSV o Excel</summary>
+          <p class="small muted" style="margin-top: 14px">
+            Columnas: nombre, categoria, caracteristicas, cantidad, maxHoras y fotografia
+            (opcional). También se admite estado (ACTIVO, MANTENIMIENTO o BAJA). Las unidades se
+            suman al material existente.
+          </p>
+          <form id="import-materiales">
+            <label for="archivo-materiales">Archivo CSV o XLSX</label
+            ><input id="archivo-materiales" type="file" accept=".csv,.xlsx" required />
+            <div class="actions">
+              <button type="submit" class="sec">Validar archivo</button
+              ><button type="button" class="sec" data-plantilla="materiales">
+                Descargar plantilla CSV
+              </button>
+            </div>
+          </form>
+          <div id="preview-materiales"></div>
+          <button id="confirmar-materiales" style="margin-top: 14px" hidden>
+            Confirmar importación
+          </button>
+        </details>
+      </section>
+      <section class="card" data-panel="usuarios" hidden>
+        <div class="section-head">
+          <div>
+            <h2>Cuentas de acceso</h2>
+            <p class="small muted">Deshabilitar una cuenta conserva sus préstamos e historial.</p>
+          </div>
+          <button id="nuevo-encargado">Crear encargado</button>
+        </div>
+        <div class="toolbar">
+          <div>
+            <label for="usuarios-buscar">Buscar nombre, matrícula o correo</label
+            ><input id="usuarios-buscar" type="search" />
+          </div>
+          <div>
+            <label for="usuarios-rol">Rol</label
+            ><select id="usuarios-rol">
+              <option value="">Todos</option>
+              <option value="ALUMNO">Alumno</option>
+              <option value="ENCARGADO">Encargado</option>
+              <option value="ADMIN">Administrador</option>
+              <option value="DOCENTE">Docente</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Identificador / Correo</th>
+                <th>Rol</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="usuarios"></tbody>
+          </table>
+        </div>
+        <details class="subform" style="margin-top: 20px">
+          <summary>Cargar lista oficial de alumnos inscritos</summary>
+          <p class="small muted" style="margin-top: 14px">
+            Columnas: matricula, nombre, correo, carrera, periodo, estado (ACTIVO o INACTIVO).
+            Password es opcional; se generan credenciales temporales para las cuentas nuevas.
+          </p>
+          <form id="import-alumnos">
+            <label for="archivo-alumnos">Archivo CSV o XLSX</label
+            ><input id="archivo-alumnos" type="file" accept=".csv,.xlsx" required /><label
+              class="check"
+              ><input id="semestre-completo" type="checkbox" /><span
+                >Es la lista completa del nuevo semestre. Marcar como inactivos a los alumnos que no
+                aparezcan.</span
+              ></label
+            >
+            <div class="actions">
+              <button type="submit" class="sec">Validar lista</button
+              ><button type="button" class="sec" data-plantilla="alumnos">
+                Descargar plantilla CSV
+              </button>
+            </div>
+          </form>
+          <div id="preview-alumnos"></div>
+          <button id="confirmar-alumnos" style="margin-top: 14px" hidden>
+            Confirmar importación
+          </button>
+          <div id="credenciales" class="credential" hidden>
+            <h3>Credenciales iniciales</h3>
+            <p class="small">
+              Guárdalas y entrégalas por el procedimiento institucional. Se muestran únicamente como
+              resultado de esta importación.
+            </p>
+            <pre id="credenciales-texto"></pre>
+            <button id="descargar-credenciales" class="mini sec">Descargar credenciales CSV</button
+            ><button id="ocultar-credenciales" class="mini sec">Ocultar credenciales</button>
+          </div>
+        </details>
+        <details class="subform">
+          <summary>Consultar padrón del semestre</summary>
+          <div class="table-wrap" style="margin-top: 12px">
+            <table>
+              <thead>
+                <tr>
+                  <th>Matrícula</th>
+                  <th>Alumno</th>
+                  <th>Carrera</th>
+                  <th>Periodo</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="padron"></tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+      <div data-panel="incidencias" hidden>
+        <section class="card">
+          <h2>Incidencias de material</h2>
+          <div class="toolbar">
+            <div>
+              <label for="incidencia-tipo">Tipo</label
+              ><select id="incidencia-tipo">
+                <option value="">Todos</option>
+                <option value="DANADO">Dañado</option>
+                <option value="ROTO">Roto</option>
+                <option value="RAYADO">Rayado</option>
+                <option value="ASTILLADO">Astillado</option>
+                <option value="PERDIDA">Pérdida</option>
+              </select>
+            </div>
+            <div>
+              <label for="incidencia-estado">Estado</label
+              ><select id="incidencia-estado">
+                <option value="">Todos</option>
+                <option value="PENDIENTE">Pendiente</option>
+                <option value="CONVENIO">Con convenio</option>
+                <option value="LIQUIDADA">Liquidada</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Incidencia</th>
+                  <th>Alumno</th>
+                  <th>Material</th>
+                  <th>Descripción / Encargado</th>
+                  <th>Estado</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="incidencias"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="card">
+          <h2>Adeudos</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Adeudo</th>
+                  <th>Alumno</th>
+                  <th>Incidencia</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="adeudos"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="card">
+          <h2>Convenios de reposición</h2>
+          <p class="small muted">
+            Un convenio vigente permite al alumno seguir solicitando material. La liquidación es un
+            registro administrativo; no se realizan pagos en el sistema.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Convenio</th>
+                  <th>Alumno</th>
+                  <th>Material / Descripción</th>
+                  <th>Fecha límite</th>
+                  <th>Estado</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="convenios"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+      <section class="card" data-panel="reportes" hidden>
+        <h2>Reportes del almacén</h2>
+        <form id="reporte-form">
+          <div class="form-grid">
+            <div>
+              <label for="reporte-tipo">Tipo de reporte</label
+              ><select id="reporte-tipo" name="tipo">
+                <option value="prestamos">Préstamos</option>
+                <option value="materiales">Materiales más solicitados</option>
+                <option value="danados">Material dañado</option>
+                <option value="perdidos">Material perdido</option>
+                <option value="incidencias">Incidencias</option>
+                <option value="adeudos">Alumnos con adeudos</option>
+              </select>
+            </div>
+            <div>
+              <label for="reporte-estado">Estado (opcional)</label
+              ><input
+                id="reporte-estado"
+                name="estado"
+                placeholder="Ej. ENTREGADO, PENDIENTE, VENCIDO"
+              />
+            </div>
+            <div>
+              <label for="reporte-desde">Desde</label
+              ><input id="reporte-desde" name="desde" type="date" />
+            </div>
+            <div>
+              <label for="reporte-hasta">Hasta</label
+              ><input id="reporte-hasta" name="hasta" type="date" />
+            </div>
+            <div>
+              <label for="reporte-material">Material</label
+              ><select id="reporte-material" name="materialId">
+                <option value="">Todos los materiales</option>
+              </select>
+            </div>
+            <div>
+              <label for="reporte-usuario">Alumno</label
+              ><select id="reporte-usuario" name="usuarioId">
+                <option value="">Todos los alumnos</option>
+              </select>
+            </div>
+            <div>
+              <label for="reporte-incidencia">Tipo de incidencia</label
+              ><select id="reporte-incidencia" name="tipoIncidencia">
+                <option value="">Todos</option>
+                <option value="DANADO">Dañado</option>
+                <option value="ROTO">Roto</option>
+                <option value="RAYADO">Rayado</option>
+                <option value="ASTILLADO">Astillado</option>
+                <option value="PERDIDA">Pérdida</option>
+              </select>
+            </div>
+          </div>
+          <div class="actions">
+            <button type="submit">Generar vista previa</button
+            ><button type="button" class="sec" data-exportar="pdf">Exportar PDF</button
+            ><button type="button" class="sec" data-exportar="xlsx">Exportar Excel</button>
+          </div>
+        </form>
+        <div id="reporte-resumen" class="small muted" style="margin-top: 20px"></div>
+        <div id="reporte-preview" class="report-preview" style="margin-top: 12px"></div>
+      </section>
+      <section class="card" data-panel="actividad" hidden>
+        <h2>Bitácora de actividad</h2>
+        <p class="small muted">Registro de solo lectura de las acciones críticas del sistema.</p>
+        <form id="actividad-form" class="toolbar">
+          <div>
+            <label for="actividad-modulo">Categoría</label
+            ><select id="actividad-modulo" name="modulo">
+              <option value="">Todas</option>
+              <option value="USUARIOS">Usuarios</option>
+              <option value="PRESTAMOS">Préstamos</option>
+              <option value="MATERIALES">Materiales e inventario</option>
+            </select>
+          </div>
+          <div>
+            <label for="actividad-desde">Desde</label
+            ><input id="actividad-desde" name="desde" type="date" />
+          </div>
+          <div>
+            <label for="actividad-hasta">Hasta</label
+            ><input id="actividad-hasta" name="hasta" type="date" />
+          </div>
+          <button type="submit" class="sec">Consultar</button>
+        </form>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha y hora</th>
+                <th>Usuario / Rol</th>
+                <th>Categoría</th>
+                <th>Acción</th>
+                <th>Detalle</th>
+              </tr>
+            </thead>
+            <tbody id="actividad"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="card" data-panel="configuracion" hidden>
+        <h2>Reglas operativas</h2>
+        <p class="small muted">
+          Se aplican automáticamente a las nuevas solicitudes. Horario institucional:
+          <span data-zona>America/Tijuana</span>.
+        </p>
+        <form id="config-form">
+          <div class="form-grid">
+            <div>
+              <label for="tolerancia">Tolerancia de recolección (minutos)</label
+              ><input
+                id="tolerancia"
+                name="toleranciaMinutos"
+                type="number"
+                min="1"
+                max="240"
+                required
+              />
+            </div>
+            <div>
+              <label for="anticipacion-max">Anticipación máxima (horas)</label
+              ><input
+                id="anticipacion-max"
+                name="anticipacionMaxHoras"
+                type="number"
+                min="1"
+                max="720"
+                required
+              />
+            </div>
+            <div>
+              <label for="anticipacion-min">Anticipación mínima (minutos)</label
+              ><input
+                id="anticipacion-min"
+                name="anticipacionMinMinutos"
+                type="number"
+                min="0"
+                max="10080"
+                required
+              />
+            </div>
+            <div>
+              <label for="aviso-vencimiento">Avisar antes del vencimiento (minutos)</label
+              ><input
+                id="aviso-vencimiento"
+                name="avisoVencimientoMinutos"
+                type="number"
+                min="1"
+                max="1440"
+                required
+              />
+            </div>
+            <div>
+              <label for="apertura">Hora de apertura</label
+              ><input id="apertura" name="horaApertura" type="time" required />
+            </div>
+            <div>
+              <label for="cierre">Hora de cierre</label
+              ><input id="cierre" name="horaCierre" type="time" required />
+            </div>
+          </div>
+          <p class="small muted" style="margin-top: 15px">
+            Las recolecciones y devoluciones se realizan de lunes a viernes. Los días festivos se
+            atienden por el procedimiento del almacén.
+          </p>
+          <button type="submit">Guardar reglas</button>
+        </form>
+      </section>
+      <div data-panel="avisos" hidden>
+        <section class="card">
+          <div class="section-head">
+            <h2>Avisos globales</h2>
+            <button id="nuevo-aviso">Publicar aviso</button>
+          </div>
+          <div id="avisos-lista"></div>
+        </section>
+        <section class="card">
+          <div class="section-head">
+            <h2>Sugerencias por práctica</h2>
+            <button id="nueva-practica">Agregar práctica</button>
+          </div>
+          <div id="practicas-lista"></div>
+        </section>
+      </div>
+      <p class="footer-note">CIMA · FCQI · Horarios en <span data-zona>America/Tijuana</span></p>
+    </main>
+    <script src="app.js"></script>
+    <script src="admin.js"></script>
+  </body>
 </html>

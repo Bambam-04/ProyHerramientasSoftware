@@ -1,79 +1,150 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es">
-<head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CIMA — Material</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <header><h1>CIMA</h1><div><span id="quien"></span><button class="sec mini" onclick="salir()">Cerrar sesión</button></div></header>
-  <main>
-    <section>
-      <h2>Material disponible</h2>
-      <table>
-        <thead><tr><th>Material</th><th>Estado</th><th>Disponibles</th><th></th></tr></thead>
-        <tbody id="materiales"></tbody>
-      </table>
-    </section>
-    <section id="formulario" hidden>
-      <h2 id="titulo-form">Solicitar material</h2>
-      <div class="fila">
-        <input id="cantidad" type="number" value="1" aria-label="Cantidad">
-        <input id="fecha" type="date" aria-label="Fecha de devolución">
-        <button id="enviar">Enviar solicitud</button>
-        <button class="sec" id="cancelar">Cancelar</button>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>CIMA · Mi almacén</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="catalogo.html"
+        ><span class="brand-mark">C</span
+        ><span><strong>CIMA</strong><small>Almacén de material · FCQI</small></span></a
+      >
+      <div class="header-actions">
+        <span id="quien"></span><button class="sec mini" data-password>Contraseña</button
+        ><button class="sec mini" data-salir>Cerrar sesión</button>
       </div>
-      <div id="msg" class="msg" role="alert"></div>
-    </section>
-    <section>
-      <h2>Mis préstamos</h2>
-      <table>
-        <thead><tr><th>Material</th><th>Cant.</th><th>Estado</th><th>Entrega</th><th>Devolver el</th></tr></thead>
-        <tbody id="mios"></tbody>
-      </table>
-    </section>
-  </main>
-  <script src="app.js"></script>
-  <script>
-    if (requerirSesion()) iniciar();
-    let seleccionado = null;
-
-    async function cargar() {
-      const [mats, mios] = await Promise.all([api('/api/materiales'), api('/api/mis-prestamos')]);
-      document.getElementById('materiales').innerHTML = mats.map((m) => `
-        <tr><td>${esc(m.nombre)}</td>
-        <td><span class="badge ${esc(m.estado)}">${esc(m.estado)}</span></td>
-        <td>${m.disponibles} de ${m.cantidadTotal}</td>
-        <td><button class="mini" data-id="${m.id}" data-nombre="${esc(m.nombre)}">Solicitar</button></td></tr>`).join('');
-      document.getElementById('mios').innerHTML = mios.length ? mios.map((p) => `
-        <tr><td>${esc(p.material.nombre)}</td><td>${p.cantidad}</td>
-        <td><span class="badge ${p.estado}">${p.estado.toLowerCase()}</span></td>
-        <td>${fecha(p.fechaEntrega)}</td><td>${fecha(p.fechaDevolucion)}</td></tr>`).join('')
-        : '<tr><td colspan="5">Aún no has solicitado material.</td></tr>';
-    }
-
-    function iniciar() {
-      cargar().catch((e) => mostrar('msg', e.message, 'error'));
-      document.getElementById('materiales').addEventListener('click', (ev) => {
-        const b = ev.target.closest('button[data-id]'); if (!b) return;
-        seleccionado = b.dataset.id;
-        document.getElementById('titulo-form').textContent = 'Solicitar: ' + b.dataset.nombre;
-        document.getElementById('formulario').hidden = false;
-        mostrar('msg', '');
-      });
-      document.getElementById('cancelar').addEventListener('click', () => { document.getElementById('formulario').hidden = true; });
-      document.getElementById('enviar').addEventListener('click', async () => {
-        try {
-          const d = await api('/api/prestamos', { method: 'POST', body: {
-            materialId: seleccionado,
-            cantidad: document.getElementById('cantidad').value,
-            fechaDevolucion: document.getElementById('fecha').value } });
-          mostrar('msg', d.mensaje, 'ok');
-          cargar();
-        } catch (e) { mostrar('msg', e.message, 'error'); }
-      });
-    }
-  </script>
-</body>
+    </header>
+    <main class="shell">
+      <div class="page-head">
+        <div>
+          <p class="eyebrow">Mi almacén</p>
+          <h1>Prepara tu próxima práctica</h1>
+          <p class="muted">Solicita tus materiales y recógelos en ventanilla.</p>
+        </div>
+        <span class="live">Actualización cada 5 segundos</span>
+      </div>
+      <div id="msg" class="msg" role="alert" hidden></div>
+      <div id="conexion" class="msg" role="status" hidden></div>
+      <div id="avisos"></div>
+      <div id="restriccion" class="alerta" hidden></div>
+      <nav class="tabs" aria-label="Secciones">
+        <button class="selected" data-tab="catalogo" aria-current="page">Catálogo</button
+        ><button data-tab="prestamos">
+          Mis préstamos <span id="cuenta-prestamos" class="count">0</span></button
+        ><button data-tab="cuenta">Convenios y adeudos</button
+        ><button data-tab="notificaciones">
+          Notificaciones <span id="cuenta-notificaciones" class="count">0</span>
+        </button>
+      </nav>
+      <div data-panel="catalogo">
+        <div class="catalog-layout">
+          <div class="catalog-main">
+            <div class="toolbar">
+              <div>
+                <label for="buscar">Buscar material</label
+                ><input id="buscar" type="search" placeholder="Nombre o características" />
+              </div>
+              <div>
+                <label for="categoria">Categoría</label
+                ><select id="categoria">
+                  <option value="">Todas las categorías</option>
+                </select>
+              </div>
+            </div>
+            <div id="materiales" class="material-grid" aria-live="polite">
+              <p class="muted">Cargando catálogo…</p>
+            </div>
+            <section class="card" style="margin-top: 22px">
+              <h2>Materiales por práctica</h2>
+              <label for="buscar-practica">Nombre de la práctica</label
+              ><input
+                id="buscar-practica"
+                type="search"
+                placeholder="Busca una práctica de laboratorio"
+              />
+              <div id="practicas" style="margin-top: 15px"></div>
+            </section>
+          </div>
+          <aside class="card cart cart-empty">
+            <div class="section-head">
+              <h2>Tu solicitud</h2>
+              <span id="cart-count" class="count">0</span>
+            </div>
+            <div id="cart-items" class="muted small">Agrega materiales del catálogo.</div>
+            <form id="solicitud-form">
+              <label for="recogida-dia">Día de recolección</label
+              ><input
+                id="recogida-dia"
+                name="dia"
+                type="text"
+                readonly
+                placeholder="Selecciona un día hábil"
+                required
+                aria-describedby="horario-ayuda"
+              />
+              <div id="calendario" class="calendar" aria-label="Calendario de recolección"></div>
+              <label for="recogida-hora">Hora de recolección</label
+              ><input id="recogida-hora" name="hora" type="time" required />
+              <p id="horario-ayuda" class="small muted" style="margin-top: 8px">
+                Lunes a viernes · Horario del plantel
+              </p>
+              <label class="check"
+                ><input type="checkbox" id="uso-interno" required /><span
+                  >Usaré el material únicamente dentro de la Facultad de Ciencias Químicas e
+                  Ingeniería.</span
+                ></label
+              ><button type="submit" id="enviar" style="width: 100%; margin-top: 17px" disabled>
+                Enviar solicitud
+              </button>
+              <p class="small muted" style="margin-top: 12px; margin-bottom: 0">
+                La reserva se confirma al enviar. Presenta tu código cuando la solicitud esté
+                preparada.
+              </p>
+            </form>
+          </aside>
+        </div>
+      </div>
+      <section class="card" data-panel="prestamos" hidden>
+        <div class="section-head">
+          <div>
+            <h2>Mis solicitudes e historial</h2>
+            <p class="small muted">Consulta fechas, piezas, devoluciones e incidencias.</p>
+          </div>
+        </div>
+        <div id="mios"></div>
+      </section>
+      <div data-panel="cuenta" hidden>
+        <section class="card">
+          <h2>Mi estado</h2>
+          <div id="estado-cuenta"></div>
+        </section>
+        <div class="grid-2">
+          <section class="card">
+            <h2>Convenios de reposición</h2>
+            <div id="convenios"></div>
+          </section>
+          <section class="card">
+            <h2>Adeudos e incidencias</h2>
+            <div id="adeudos"></div>
+            <p class="small muted">
+              Los acuerdos y liquidaciones se formalizan con el administrador. CIMA no procesa pagos
+              electrónicos.
+            </p>
+          </section>
+        </div>
+      </div>
+      <section class="card" data-panel="notificaciones" hidden>
+        <h2>Notificaciones</h2>
+        <div id="notificaciones"></div>
+      </section>
+      <p class="footer-note">
+        Uso exclusivo dentro del plantel · Horarios en <span data-zona>America/Tijuana</span>
+      </p>
+    </main>
+    <script src="app.js"></script>
+    <script src="catalogo.js"></script>
+  </body>
 </html>
