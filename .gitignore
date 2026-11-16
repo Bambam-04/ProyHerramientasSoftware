@@ -1,7 +1,4 @@
 node_modules/
-# Configuración local con secretos: nunca se versiona. Usa .env.example como plantilla.
 .env
-.env.*
-!.env.example
 .local/
 *.log
