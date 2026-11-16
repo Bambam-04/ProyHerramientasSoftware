@@ -1,0 +1,160 @@
+﻿<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>CIMA · Ventanilla</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="operacion.html"
+        ><span class="brand-mark">C</span
+        ><span><strong>CIMA</strong><small>Ventanilla · FCQI</small></span></a
+      >
+      <div class="header-actions">
+        <a class="button sec mini" id="nav-admin" href="admin.html" hidden>Administración</a
+        ><span id="quien"></span><button class="sec mini" data-password>Contraseña</button
+        ><button class="sec mini" data-salir>Cerrar sesión</button>
+      </div>
+    </header>
+    <main class="shell">
+      <div class="page-head">
+        <div>
+          <p class="eyebrow">Operación del almacén</p>
+          <h1>Ventanilla</h1>
+          <p class="muted">Prepara solicitudes, verifica piezas y registra devoluciones.</p>
+        </div>
+        <span class="live">Cola actualizada cada 5 segundos</span>
+      </div>
+      <div id="msg" class="msg" role="alert" hidden></div>
+      <div id="conexion" class="msg" role="status" hidden></div>
+      <div class="stats">
+        <div class="stat"><span>Pendientes</span><strong id="n-pendientes">0</strong></div>
+        <div class="stat"><span>Preparadas</span><strong id="n-preparadas">0</strong></div>
+        <div class="stat"><span>En préstamo</span><strong id="n-entregados">0</strong></div>
+        <div class="stat"><span>Préstamos vencidos</span><strong id="n-vencidos">0</strong></div>
+      </div>
+      <section class="card">
+        <form id="scan-form" class="scan-form">
+          <div>
+            <label for="codigo-solicitud">Escanear o ingresar código de solicitud</label
+            ><input
+              class="scan-input"
+              id="codigo-solicitud"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Código presentado por el alumno"
+              required
+              autofocus
+            />
+          </div>
+          <button type="submit">Buscar solicitud</button>
+        </form>
+        <p class="small muted" style="margin-top: 10px; margin-bottom: 0">
+          El lector funciona como teclado. Escanea el código y presiona Enter.
+        </p>
+      </section>
+      <nav class="tabs" aria-label="Operación">
+        <button class="selected" data-tab="pendientes" aria-current="page">Cola pendiente</button
+        ><button data-tab="preparadas">Preparadas</button
+        ><button data-tab="entregados">En préstamo</button
+        ><button data-tab="defectos">
+          Defectos previos <span id="n-defectos" class="count">0</span></button
+        ><button data-tab="historial">Historial</button>
+      </nav>
+      <section class="card" data-panel="pendientes">
+        <div class="section-head">
+          <div>
+            <h2>Cola de solicitudes</h2>
+            <p class="small muted">
+              Se atienden por orden de registro. Prepara primero la solicitud más antigua.
+            </p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Orden / Solicitud</th>
+                <th>Alumno</th>
+                <th>Materiales</th>
+                <th>Recolección</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="pendientes"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="card" data-panel="preparadas" hidden>
+        <h2>Listas para recoger</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Solicitud</th>
+                <th>Alumno</th>
+                <th>Piezas</th>
+                <th>Recoger antes de</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="preparadas"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="card" data-panel="entregados" hidden>
+        <h2>Préstamos por devolver</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Solicitud</th>
+                <th>Alumno</th>
+                <th>Piezas</th>
+                <th>Fecha límite</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="entregados"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="card" data-panel="defectos" hidden>
+        <h2>Reportes de defectos previos</h2>
+        <div id="defectos"></div>
+      </section>
+      <section class="card" data-panel="historial" hidden>
+        <h2>Historial operativo</h2>
+        <div class="toolbar">
+          <div>
+            <label for="historial-buscar">Buscar matrícula, nombre o solicitud</label
+            ><input id="historial-buscar" type="search" />
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Solicitud</th>
+                <th>Alumno</th>
+                <th>Materiales</th>
+                <th>Estado</th>
+                <th>Entrega</th>
+                <th>Devolución</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="historial"></tbody>
+          </table>
+        </div>
+      </section>
+      <p class="footer-note">
+        Uso exclusivo dentro del plantel · Horarios en <span data-zona>America/Tijuana</span>
+      </p>
+    </main>
+    <script src="app.js"></script>
+    <script src="operacion.js"></script>
+  </body>
+</html>
